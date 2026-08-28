@@ -148,23 +148,81 @@ final class OrderService
             }
 
             $paid = $status === 'approved';
+            $orderId = (int) $order['id'];
+            $nextState = (string) $order['estado'];
+
+            if ($paid && (string) $order['estado'] !== 'paid') {
+                if ((int) $order['reserva_liberada'] === 1) {
+                    if ((string) $order['estado'] === 'cancelled') {
+                        $nextState = self::reacquireReleasedStock($db, $orderId)
+                            ? 'paid'
+                            : 'payment_review';
+                    } else {
+                        $nextState = 'payment_review';
+                    }
+                } else {
+                    $nextState = 'paid';
+                }
+            }
+
             $update = $db->prepare(
                 "UPDATE pedidos
-                 SET mp_payment_id = ?, estado_pago = ?,
-                     estado = IF(?, 'paid', estado),
+                 SET mp_payment_id = ?, estado_pago = ?, estado = ?,
                      reserva_expira_en = IF(?, NULL, reserva_expira_en),
                      actualizado_en = CURRENT_TIMESTAMP
                  WHERE id = ?"
             );
-            $update->execute([$paymentId, $status, $paid ? 1 : 0, $paid ? 1 : 0, (int) $order['id']]);
+            $update->execute([
+                $paymentId,
+                $status,
+                $nextState,
+                $paid ? 1 : 0,
+                $orderId,
+            ]);
+
             $db->commit();
-            return (int) $order['id'];
+            return $orderId;
         } catch (Throwable $e) {
             if ($db->inTransaction()) {
                 $db->rollBack();
             }
             throw $e;
         }
+    }
+
+    private static function reacquireReleasedStock(PDO $db, int $orderId): bool
+    {
+        $itemsStmt = $db->prepare(
+            'SELECT producto_id, cantidad FROM pedido_items WHERE pedido_id = ? ORDER BY id FOR UPDATE'
+        );
+        $itemsStmt->execute([$orderId]);
+        $items = $itemsStmt->fetchAll();
+        if ($items === []) {
+            return false;
+        }
+
+        $lockProduct = $db->prepare('SELECT stock FROM productos WHERE id = ? FOR UPDATE');
+        foreach ($items as $item) {
+            $productId = (int) ($item['producto_id'] ?? 0);
+            $quantity = (int) ($item['cantidad'] ?? 0);
+            if ($productId <= 0 || $quantity <= 0) {
+                return false;
+            }
+            $lockProduct->execute([$productId]);
+            $stock = $lockProduct->fetchColumn();
+            if ($stock === false || (int) $stock < $quantity) {
+                return false;
+            }
+        }
+
+        $consume = $db->prepare(
+            'UPDATE productos SET stock = stock - ?, actualizado_en = CURRENT_TIMESTAMP WHERE id = ?'
+        );
+        foreach ($items as $item) {
+            $consume->execute([(int) $item['cantidad'], (int) $item['producto_id']]);
+        }
+
+        return true;
     }
 
     public static function releaseExpiredReservations(PDO $db): int
