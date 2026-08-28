@@ -27,6 +27,18 @@ final class ProductRepository
         return $stmt->fetch() ?: null;
     }
 
+    public static function images(PDO $db, int $productId): array
+    {
+        $stmt = $db->prepare(
+            'SELECT id, producto_id, url, alt_text, orden
+             FROM producto_imagenes
+             WHERE producto_id = ?
+             ORDER BY orden ASC, id ASC'
+        );
+        $stmt->execute([$productId]);
+        return $stmt->fetchAll();
+    }
+
     public static function save(PDO $db, array $input): int
     {
         $id = max(0, (int) ($input['id'] ?? 0));
@@ -36,14 +48,15 @@ final class ProductRepository
         $descripcion = trim((string) ($input['descripcion'] ?? ''));
         $precio = (float) ($input['precio'] ?? 0);
         $stock = max(0, (int) ($input['stock'] ?? 0));
-        $imagen = trim((string) ($input['imagen_url'] ?? ''));
+        $hasImageInput = array_key_exists('imagen_url', $input);
+        $imagen = $hasImageInput ? trim((string) ($input['imagen_url'] ?? '')) : '';
         $activo = !empty($input['activo']) ? 1 : 0;
         $destacado = !empty($input['destacado']) ? 1 : 0;
 
         if ($nombre === '' || $slug === '' || $precio < 0) {
             throw new InvalidArgumentException('Nombre, slug y precio válido son obligatorios.');
         }
-        if ($imagen !== '' && filter_var($imagen, FILTER_VALIDATE_URL) === false) {
+        if ($hasImageInput && $imagen !== '' && filter_var($imagen, FILTER_VALIDATE_URL) === false && !str_starts_with($imagen, '/')) {
             throw new InvalidArgumentException('La URL de imagen no es válida.');
         }
 
@@ -51,24 +64,47 @@ final class ProductRepository
             if ($version <= 0) {
                 throw new RuntimeException('Falta la versión del producto. Vuelve a abrir la ficha antes de guardar.');
             }
-            $stmt = $db->prepare(
-                "UPDATE productos
-                 SET slug=?, nombre=?, descripcion=?, precio=?, stock=?, imagen_url=?, activo=?, destacado=?,
-                     version=version+1, actualizado_en=CURRENT_TIMESTAMP
-                 WHERE id=? AND version=? AND eliminado_en IS NULL"
-            );
-            $stmt->execute([
-                $slug,
-                $nombre,
-                $descripcion !== '' ? $descripcion : null,
-                $precio,
-                $stock,
-                $imagen !== '' ? $imagen : null,
-                $activo,
-                $destacado,
-                $id,
-                $version,
-            ]);
+
+            if ($hasImageInput) {
+                $stmt = $db->prepare(
+                    "UPDATE productos
+                     SET slug=?, nombre=?, descripcion=?, precio=?, stock=?, imagen_url=?, activo=?, destacado=?,
+                         version=version+1, actualizado_en=CURRENT_TIMESTAMP
+                     WHERE id=? AND version=? AND eliminado_en IS NULL"
+                );
+                $params = [
+                    $slug,
+                    $nombre,
+                    $descripcion !== '' ? $descripcion : null,
+                    $precio,
+                    $stock,
+                    $imagen !== '' ? $imagen : null,
+                    $activo,
+                    $destacado,
+                    $id,
+                    $version,
+                ];
+            } else {
+                $stmt = $db->prepare(
+                    "UPDATE productos
+                     SET slug=?, nombre=?, descripcion=?, precio=?, stock=?, activo=?, destacado=?,
+                         version=version+1, actualizado_en=CURRENT_TIMESTAMP
+                     WHERE id=? AND version=? AND eliminado_en IS NULL"
+                );
+                $params = [
+                    $slug,
+                    $nombre,
+                    $descripcion !== '' ? $descripcion : null,
+                    $precio,
+                    $stock,
+                    $activo,
+                    $destacado,
+                    $id,
+                    $version,
+                ];
+            }
+
+            $stmt->execute($params);
             if ($stmt->rowCount() !== 1) {
                 throw new RuntimeException(
                     'El producto cambió mientras lo editabas (por una reserva, venta u otra edición). Recarga la ficha antes de guardar.'
@@ -78,7 +114,16 @@ final class ProductRepository
         }
 
         $stmt = $db->prepare("INSERT INTO productos (slug, nombre, descripcion, precio, stock, imagen_url, activo, destacado) VALUES (?, ?, ?, ?, ?, ?, ?, ?)");
-        $stmt->execute([$slug, $nombre, $descripcion !== '' ? $descripcion : null, $precio, $stock, $imagen !== '' ? $imagen : null, $activo, $destacado]);
+        $stmt->execute([
+            $slug,
+            $nombre,
+            $descripcion !== '' ? $descripcion : null,
+            $precio,
+            $stock,
+            $hasImageInput && $imagen !== '' ? $imagen : null,
+            $activo,
+            $destacado,
+        ]);
         return (int) $db->lastInsertId();
     }
 
