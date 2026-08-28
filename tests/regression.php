@@ -10,7 +10,7 @@ $must = [
     'public/health.php' => ['SELECT 1', "'ok' => true"],
     'public/admin/productos.php' => ['Eliminar', 'Editar'],
     'public/admin/producto.php' => ['name="precio"', 'name="stock"', 'name="imagenes[]"', 'multiple', 'name="imagen_principal"', 'name="eliminar_imagen[]"', 'name="version"'],
-    'public/admin/guardar-producto.php' => ['UPLOAD_ERR_OK', 'finfo', 'getimagesize', 'move_uploaded_file', 'producto_imagenes', '8 * 1024 * 1024'],
+    'public/admin/guardar-producto.php' => ['UPLOAD_ERR_OK', 'finfo', 'getimagesize', 'move_uploaded_file', 'producto_imagenes', '8 * 1024 * 1024', 'array_splice', 'array_unshift'],
     'public/producto.php' => ['ProductRepository::images', 'productGalleryMain', 'data-gallery-src'],
     'public/.user.ini' => ['upload_max_filesize=8M', 'post_max_size=60M'],
     'public/admin/login.php' => ['throttleAdminLogin'],
@@ -25,7 +25,7 @@ $must = [
     'deploy/nova-release-reservations.timer' => ['OnUnitActiveSec=1min', 'Persistent=true'],
     'deploy/nova-release-reservations.service' => ['release-expired-reservations.php'],
     'deploy/backup.sh' => ['BACKUP_OK', 'mariadb-dump', 'uploads.tar.gz'],
-    'deploy/preflight.sh' => ['PREFLIGHT_OK', 'public/uploads/productos'],
+    'deploy/preflight.sh' => ['PREFLIGHT_OK', 'public/uploads/productos', 'runuser -u www-data -- test -w'],
     'deploy/health-check.sh' => ['HEALTH_OK'],
     'deploy/rollback.sh' => ['ROLLBACK_CODE_OK'],
 ];
