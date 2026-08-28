@@ -10,7 +10,7 @@ final class ProductRepository
 
     public static function adminList(PDO $db): array
     {
-        return $db->query("SELECT id, slug, nombre, precio, stock, activo, destacado, imagen_url, actualizado_en FROM productos WHERE eliminado_en IS NULL ORDER BY creado_en DESC")->fetchAll();
+        return $db->query("SELECT id, slug, nombre, precio, stock, version, activo, destacado, imagen_url, actualizado_en FROM productos WHERE eliminado_en IS NULL ORDER BY creado_en DESC")->fetchAll();
     }
 
     public static function findPublicBySlug(PDO $db, string $slug): ?array
@@ -30,6 +30,7 @@ final class ProductRepository
     public static function save(PDO $db, array $input): int
     {
         $id = max(0, (int) ($input['id'] ?? 0));
+        $version = max(0, (int) ($input['version'] ?? 0));
         $nombre = trim((string) ($input['nombre'] ?? ''));
         $slug = self::slugify((string) ($input['slug'] ?? $nombre));
         $descripcion = trim((string) ($input['descripcion'] ?? ''));
@@ -47,8 +48,32 @@ final class ProductRepository
         }
 
         if ($id > 0) {
-            $stmt = $db->prepare("UPDATE productos SET slug=?, nombre=?, descripcion=?, precio=?, stock=?, imagen_url=?, activo=?, destacado=?, actualizado_en=CURRENT_TIMESTAMP WHERE id=? AND eliminado_en IS NULL");
-            $stmt->execute([$slug, $nombre, $descripcion !== '' ? $descripcion : null, $precio, $stock, $imagen !== '' ? $imagen : null, $activo, $destacado, $id]);
+            if ($version <= 0) {
+                throw new RuntimeException('Falta la versión del producto. Vuelve a abrir la ficha antes de guardar.');
+            }
+            $stmt = $db->prepare(
+                "UPDATE productos
+                 SET slug=?, nombre=?, descripcion=?, precio=?, stock=?, imagen_url=?, activo=?, destacado=?,
+                     version=version+1, actualizado_en=CURRENT_TIMESTAMP
+                 WHERE id=? AND version=? AND eliminado_en IS NULL"
+            );
+            $stmt->execute([
+                $slug,
+                $nombre,
+                $descripcion !== '' ? $descripcion : null,
+                $precio,
+                $stock,
+                $imagen !== '' ? $imagen : null,
+                $activo,
+                $destacado,
+                $id,
+                $version,
+            ]);
+            if ($stmt->rowCount() !== 1) {
+                throw new RuntimeException(
+                    'El producto cambió mientras lo editabas (por una reserva, venta u otra edición). Recarga la ficha antes de guardar.'
+                );
+            }
             return $id;
         }
 
@@ -59,7 +84,7 @@ final class ProductRepository
 
     public static function softDelete(PDO $db, int $id): void
     {
-        $stmt = $db->prepare("UPDATE productos SET activo = 0, eliminado_en = CURRENT_TIMESTAMP, actualizado_en = CURRENT_TIMESTAMP WHERE id = ? AND eliminado_en IS NULL");
+        $stmt = $db->prepare("UPDATE productos SET activo = 0, eliminado_en = CURRENT_TIMESTAMP, version=version+1, actualizado_en = CURRENT_TIMESTAMP WHERE id = ? AND eliminado_en IS NULL");
         $stmt->execute([$id]);
     }
 
