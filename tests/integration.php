@@ -41,6 +41,11 @@ assertTrue($product !== null && (float) $product['precio'] === 275.0, 'No se edi
 ProductRepository::softDelete($db, $productId);
 assertTrue(ProductRepository::findById($db, $productId) === null, 'La eliminación lógica no ocultó el producto.');
 
+// Auditoría mínima de mutaciones administrativas.
+AuditLog::record($db, 'ci@example.com', 'product.test', 'product', (string) $productId, ['source' => 'integration']);
+$auditCount = (int) $db->query("SELECT COUNT(*) FROM audit_events WHERE action='product.test'")->fetchColumn();
+assertTrue($auditCount === 1, 'No se registró el evento de auditoría.');
+
 // Un producto que se quedó sin stock debe desaparecer del carrito de sesión.
 $zeroSlug = 'sin-stock-ci-' . bin2hex(random_bytes(3));
 $zeroId = ProductRepository::save($db, [
@@ -57,7 +62,13 @@ assertTrue(Cart::detailed($db) === [], 'Un producto con stock cero siguió apare
 assertTrue(Cart::all() === [], 'El producto sin stock no fue retirado de la sesión.');
 ProductRepository::softDelete($db, $zeroId);
 
-// Reserva y liberación de stock usando el producto demo.
+// Credencial histórica de prueba para conciliación de pagos.
+$db->exec("INSERT INTO payment_gateway_credentials
+(provider, credential_ref, environment, access_token_enc, webhook_secret_enc)
+VALUES ('TEST_PROVIDER', 'cred_ci', 'TEST', 'cipher-a', 'cipher-b')");
+$credentialId = (int) $db->lastInsertId();
+
+// Reserva, liberación y pago tardío con stock todavía disponible: debe reacquirir la unidad.
 $demo = ProductRepository::findPublicBySlug($db, 'vestido-aurora');
 assertTrue($demo !== null, 'No existe el producto demo.');
 $stockBefore = (int) $demo['stock'];
@@ -70,6 +81,7 @@ $order = OrderService::create($db, [
     'id' => (int) $demo['id'],
     'cantidad' => 1,
 ]]);
+$db->prepare('UPDATE pedidos SET payment_credential_id = ? WHERE id = ?')->execute([$credentialId, (int) $order['id']]);
 
 $stockAfter = (int) $db->query('SELECT stock FROM productos WHERE id=' . (int) $demo['id'])->fetchColumn();
 assertTrue($stockAfter === $stockBefore - 1, 'El checkout no reservó el stock.');
@@ -80,13 +92,71 @@ assertTrue($released >= 1, 'No se liberó la reserva vencida.');
 $stockRestored = (int) $db->query('SELECT stock FROM productos WHERE id=' . (int) $demo['id'])->fetchColumn();
 assertTrue($stockRestored === $stockBefore, 'El stock no volvió después de liberar la reserva.');
 
+OrderService::applyPayment($db, [
+    'id' => '900001',
+    'status' => 'approved',
+    'external_reference' => (string) $order['numero_pedido'],
+    'currency_id' => 'MXN',
+    'transaction_amount' => (float) $order['total'],
+], $credentialId);
+$paidOrder = OrderService::findByNumber($db, (string) $order['numero_pedido']);
+assertTrue($paidOrder !== null && $paidOrder['estado'] === 'paid', 'El pago tardío con stock disponible no quedó pagado.');
+$stockReacquired = (int) $db->query('SELECT stock FROM productos WHERE id=' . (int) $demo['id'])->fetchColumn();
+assertTrue($stockReacquired === $stockBefore - 1, 'El pago tardío no volvió a consumir la unidad liberada.');
+
+// Repetir el mismo webhook debe ser idempotente y no volver a consumir stock.
+OrderService::applyPayment($db, [
+    'id' => '900001',
+    'status' => 'approved',
+    'external_reference' => (string) $order['numero_pedido'],
+    'currency_id' => 'MXN',
+    'transaction_amount' => (float) $order['total'],
+], $credentialId);
+$stockAfterRepeat = (int) $db->query('SELECT stock FROM productos WHERE id=' . (int) $demo['id'])->fetchColumn();
+assertTrue($stockAfterRepeat === $stockReacquired, 'Un webhook repetido consumió stock por segunda vez.');
+
+// Pago tardío sin inventario disponible: registra el cobro pero no vende stock inexistente.
+$lateSlug = 'late-ci-' . bin2hex(random_bytes(3));
+$lateProductId = ProductRepository::save($db, [
+    'nombre' => 'Pago tardío CI',
+    'slug' => $lateSlug,
+    'precio' => '150.00',
+    'stock' => '1',
+    'imagen_url' => 'https://example.com/late.jpg',
+    'activo' => '1',
+]);
+$lateOrder = OrderService::create($db, [
+    'nombre' => 'Cliente Tardío',
+    'email' => 'late@example.com',
+    'telefono' => '9980000001',
+    'direccion' => 'Prueba CI',
+], [[
+    'id' => $lateProductId,
+    'cantidad' => 1,
+]]);
+$db->prepare('UPDATE pedidos SET payment_credential_id = ?, reserva_expira_en = DATE_SUB(NOW(), INTERVAL 1 MINUTE) WHERE id = ?')
+    ->execute([$credentialId, (int) $lateOrder['id']]);
+OrderService::releaseExpiredReservations($db);
+$db->prepare('UPDATE productos SET stock = 0 WHERE id = ?')->execute([$lateProductId]);
+
+OrderService::applyPayment($db, [
+    'id' => '900002',
+    'status' => 'approved',
+    'external_reference' => (string) $lateOrder['numero_pedido'],
+    'currency_id' => 'MXN',
+    'transaction_amount' => (float) $lateOrder['total'],
+], $credentialId);
+$reviewOrder = OrderService::findByNumber($db, (string) $lateOrder['numero_pedido']);
+assertTrue($reviewOrder !== null && $reviewOrder['estado'] === 'payment_review', 'El pago tardío sin stock no quedó en revisión.');
+assertTrue($reviewOrder['estado_pago'] === 'approved', 'El pago aprobado no quedó registrado financieramente.');
+$lateStock = (int) $db->query('SELECT stock FROM productos WHERE id=' . $lateProductId)->fetchColumn();
+assertTrue($lateStock === 0, 'La conciliación tardía inventó stock inexistente.');
+ProductRepository::softDelete($db, $lateProductId);
+
 // Las versiones de credenciales son inmutables a nivel MariaDB.
-$db->exec("INSERT INTO payment_gateway_credentials
-(provider, credential_ref, environment, access_token_enc, webhook_secret_enc)
-VALUES ('TEST_PROVIDER', 'cred_ci', 'TEST', 'cipher-a', 'cipher-b')");
 $immutable = false;
 try {
-    $db->exec("UPDATE payment_gateway_credentials SET account_label='mutado' WHERE provider='TEST_PROVIDER' AND credential_ref='cred_ci'");
+    $db->exec("UPDATE payment_gateway_credentials SET account_label='mutado' WHERE id=" . $credentialId);
 } catch (PDOException $e) {
     $immutable = true;
 }
