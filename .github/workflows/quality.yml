@@ -23,7 +23,7 @@ jobs:
       - uses: shivammathur/setup-php@v2
         with:
           php-version: '8.2'
-          extensions: mbstring, openssl, pdo_mysql, curl
+          extensions: mbstring, openssl, pdo_mysql, curl, fileinfo
       - name: Install MariaDB client
         run: |
           sudo apt-get update
@@ -34,6 +34,8 @@ jobs:
         run: find deploy -type f -name '*.sh' -print0 | xargs -0 -n1 bash -n
       - name: Static regressions
         run: php tests/regression.php
+      - name: Gallery snapshot lock
+        run: php tests/gallery-lock.php
       - name: Build schema and seed
         env:
           MYSQL_PWD: root
@@ -41,13 +43,23 @@ jobs:
           mariadb -h 127.0.0.1 -uroot -e "CREATE DATABASE nova_boutique CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci"
           mariadb -h 127.0.0.1 -uroot nova_boutique < database/001_initial.sql
           mariadb -h 127.0.0.1 -uroot nova_boutique < database/002_seed_demo.sql
-          mariadb -h 127.0.0.1 -uroot nova_boutique -e "SELECT nombre, precio, stock FROM productos WHERE slug='vestido-aurora'"
+          mariadb -h 127.0.0.1 -uroot nova_boutique < database/003_product_images.sql
+          mariadb -h 127.0.0.1 -uroot nova_boutique -e "SELECT nombre, precio, stock FROM productos WHERE slug='vestido-aurora'; SELECT producto_id, url, orden FROM producto_imagenes ORDER BY producto_id, orden"
       - name: Schema idempotence
         env:
           MYSQL_PWD: root
         run: |
           mariadb -h 127.0.0.1 -uroot nova_boutique < database/001_initial.sql
           mariadb -h 127.0.0.1 -uroot nova_boutique < database/002_seed_demo.sql
+          mariadb -h 127.0.0.1 -uroot nova_boutique < database/003_product_images.sql
+      - name: Product gallery MariaDB integration
+        env:
+          DB_HOST: 127.0.0.1
+          DB_PORT: 3306
+          DB_DATABASE: nova_boutique
+          DB_USERNAME: root
+          DB_PASSWORD: root
+        run: php tests/gallery-integration.php
       - name: MariaDB integration
         env:
           DB_HOST: 127.0.0.1

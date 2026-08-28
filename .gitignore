@@ -1,5 +1,7 @@
 .env
 public/uploads/*
-!public/uploads/.gitkeep
+!public/uploads/productos/
+public/uploads/productos/*
+!public/uploads/productos/.gitkeep
 .DS_Store
 Thumbs.db
