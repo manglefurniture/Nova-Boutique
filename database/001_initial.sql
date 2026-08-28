@@ -8,6 +8,7 @@ CREATE TABLE IF NOT EXISTS productos (
     descripcion TEXT NULL,
     precio DECIMAL(10,2) NOT NULL,
     stock INT UNSIGNED NOT NULL DEFAULT 0,
+    version BIGINT UNSIGNED NOT NULL DEFAULT 1,
     imagen_url VARCHAR(700) NULL,
     activo TINYINT(1) NOT NULL DEFAULT 1,
     destacado TINYINT(1) NOT NULL DEFAULT 0,
