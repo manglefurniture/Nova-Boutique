@@ -44,6 +44,7 @@ if (PHP_SAPI !== 'cli' && session_status() !== PHP_SESSION_ACTIVE) {
 
 require_once $root . '/src/Database.php';
 require_once $root . '/src/Security.php';
+require_once $root . '/src/AuditLog.php';
 require_once $root . '/src/ProductRepository.php';
 require_once $root . '/src/Cart.php';
 require_once $root . '/src/OrderService.php';
