@@ -1,0 +1,59 @@
+name: Quality
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  php-quality:
+    runs-on: ubuntu-24.04
+    services:
+      mariadb:
+        image: mariadb:11.8
+        env:
+          MARIADB_ROOT_PASSWORD: root
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mariadb-admin ping -h 127.0.0.1 -uroot -proot"
+          --health-interval=10s --health-timeout=5s --health-retries=10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.2'
+          extensions: mbstring, openssl, pdo_mysql, curl
+      - name: Install MariaDB client
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y mariadb-client
+      - name: PHP syntax
+        run: find . -type f -name '*.php' -print0 | xargs -0 -n1 php -l
+      - name: Shell syntax
+        run: find deploy -type f -name '*.sh' -print0 | xargs -0 -n1 bash -n
+      - name: Static regressions
+        run: php tests/regression.php
+      - name: Build schema and seed
+        env:
+          MYSQL_PWD: root
+        run: |
+          mariadb -h 127.0.0.1 -uroot -e "CREATE DATABASE nova_boutique CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci"
+          mariadb -h 127.0.0.1 -uroot nova_boutique < database/001_initial.sql
+          mariadb -h 127.0.0.1 -uroot nova_boutique < database/002_seed_demo.sql
+          mariadb -h 127.0.0.1 -uroot nova_boutique -e "SELECT nombre, precio, stock FROM productos WHERE slug='vestido-aurora'"
+      - name: Schema idempotence
+        env:
+          MYSQL_PWD: root
+        run: |
+          mariadb -h 127.0.0.1 -uroot nova_boutique < database/001_initial.sql
+          mariadb -h 127.0.0.1 -uroot nova_boutique < database/002_seed_demo.sql
+      - name: MariaDB integration
+        env:
+          DB_HOST: 127.0.0.1
+          DB_PORT: 3306
+          DB_DATABASE: nova_boutique
+          DB_USERNAME: root
+          DB_PASSWORD: root
+          PAYMENT_RESERVATION_TTL_MINUTES: 30
+        run: php tests/integration.php
