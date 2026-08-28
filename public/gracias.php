@@ -1,0 +1,3 @@
+<?php
+declare(strict_types=1);require_once dirname(__DIR__).'/config/bootstrap.php';require_once __DIR__.'/_layout.php';$order=OrderService::findByNumber(Database::connection(),trim((string)($_GET['order']??'')));pageStart('Pedido recibido');?>
+<main class="wrap"><div class="panel" style="max-width:720px;margin:60px auto"><span class="eyebrow">Gracias</span><h1 style="font:400 54px Georgia,serif">Pedido recibido.</h1><?php if($order):?><p>Tu número es <strong><?=Security::e($order['numero_pedido'])?></strong>.</p><p>Estado de pago: <span class="badge"><?=Security::e($order['estado_pago'])?></span></p><?php endif;?><a class="btn" href="/">Volver a Nova</a></div></main><?php pageEnd();?>

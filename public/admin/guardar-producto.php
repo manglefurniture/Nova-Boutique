@@ -1,0 +1,2 @@
+<?php
+declare(strict_types=1);require_once __DIR__.'/_bootstrap.php';try{Security::verifyCsrf($_POST['csrf']??null);$id=ProductRepository::save($db,$_POST);header('Location: /admin/producto.php?id='.$id);exit;}catch(Throwable $e){http_response_code(422);adminStart('No se pudo guardar');echo '<div class="notice">'.Security::e($e->getMessage()).'</div><a class="pill" href="/admin/productos.php">Volver</a>';adminEnd();}
