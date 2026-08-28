@@ -12,8 +12,12 @@ command -v git >/dev/null 2>&1 || { echo "git is required" >&2; exit 1; }
 command -v php >/dev/null 2>&1 || { echo "php is required" >&2; exit 1; }
 command -v mariadb-dump >/dev/null 2>&1 || { echo "mariadb-dump is required" >&2; exit 1; }
 command -v tar >/dev/null 2>&1 || { echo "tar is required" >&2; exit 1; }
+command -v flock >/dev/null 2>&1 || { echo "flock is required" >&2; exit 1; }
 
 [[ -f "$APP_ROOT/.env" ]] || { echo "BACKUP_FAILED .env missing" >&2; exit 1; }
+lock_file="$APP_ROOT/deploy/gallery.lock"
+[[ -r "$lock_file" ]] || { echo "BACKUP_FAILED gallery lock missing" >&2; exit 1; }
+
 upload_dir="$({
   php -r '
     $values = parse_ini_file($argv[1], false, INI_SCANNER_RAW);
@@ -26,6 +30,12 @@ upload_dir="$({
   ' "$APP_ROOT/.env" "$APP_ROOT/public/uploads/productos"
 })" || { echo "BACKUP_FAILED could not resolve UPLOAD_DIR" >&2; exit 1; }
 [[ -n "$upload_dir" && -d "$upload_dir" ]] || { echo "BACKUP_FAILED upload directory missing: $upload_dir" >&2; exit 1; }
+
+# The admin acquires the same exclusive lock before any gallery mutation.
+# Keep this descriptor locked through BOTH mariadb-dump and the file archive,
+# so the database snapshot cannot reference a file deleted between snapshots.
+exec 9<"$lock_file"
+flock -x 9
 
 stamp="$(date -u +%Y%m%d-%H%M%S)"
 destination="${BACKUP_ROOT%/}/deploy-${stamp}"
