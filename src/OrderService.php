@@ -73,7 +73,9 @@ final class OrderService
                  VALUES (?, ?, ?, ?, ?, ?)'
             );
             $stockStmt = $db->prepare(
-                'UPDATE productos SET stock = stock - ?, actualizado_en = CURRENT_TIMESTAMP WHERE id = ?'
+                'UPDATE productos
+                 SET stock = stock - ?, version = version + 1, actualizado_en = CURRENT_TIMESTAMP
+                 WHERE id = ?'
             );
             foreach ($locked as $item) {
                 $itemStmt->execute([
@@ -216,7 +218,9 @@ final class OrderService
         }
 
         $consume = $db->prepare(
-            'UPDATE productos SET stock = stock - ?, actualizado_en = CURRENT_TIMESTAMP WHERE id = ?'
+            'UPDATE productos
+             SET stock = stock - ?, version = version + 1, actualizado_en = CURRENT_TIMESTAMP
+             WHERE id = ?'
         );
         foreach ($items as $item) {
             $consume->execute([(int) $item['cantidad'], (int) $item['producto_id']]);
@@ -240,7 +244,11 @@ final class OrderService
             )->fetchAll();
 
             $itemsStmt = $db->prepare('SELECT producto_id, cantidad FROM pedido_items WHERE pedido_id = ?');
-            $restore = $db->prepare('UPDATE productos SET stock = stock + ?, actualizado_en = CURRENT_TIMESTAMP WHERE id = ?');
+            $restore = $db->prepare(
+                'UPDATE productos
+                 SET stock = stock + ?, version = version + 1, actualizado_en = CURRENT_TIMESTAMP
+                 WHERE id = ?'
+            );
             $cancel = $db->prepare(
                 "UPDATE pedidos
                  SET estado = 'cancelled', reserva_liberada = 1, actualizado_en = CURRENT_TIMESTAMP
