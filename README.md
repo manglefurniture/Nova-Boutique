@@ -42,7 +42,7 @@ PHP 8.2+ con `pdo_mysql`, `mbstring`, `openssl`, `curl` y `fileinfo`; MariaDB 11
 install -d -o www-data -g www-data -m 775 /var/www/nova.hacheinteractive.com/app/public/uploads/productos
 ```
 
-7. Configura Nginx con `deploy/nginx-nova.conf` como referencia y conserva `client_max_body_size 50M;` también si Certbot modifica el virtual host.
+7. Configura Nginx con `deploy/nginx-nova.conf` como referencia y conserva `client_max_body_size 60M;` también si Certbot modifica el virtual host.
 8. Instala el scheduler de reservas descrito abajo.
 
 ## Producto muestra
@@ -55,7 +55,7 @@ El panel acepta varias fotos en un mismo guardado (`JPG`, `PNG` o `WebP`), hasta
 
 La primera imagen por `orden` es la principal y alimenta también `productos.imagen_url` para mantener compatibilidad con tarjetas, carrito y otras vistas. Desde admin se puede elegir otra imagen existente como principal o marcar fotos para eliminar. El storefront muestra la principal y miniaturas para cambiar entre las fotos disponibles.
 
-`public/.user.ini` eleva los límites PHP para estas cargas y Nginx debe conservar `client_max_body_size 50M;`. El directorio de cargas necesita ser escribible por `www-data`.
+`public/.user.ini` eleva los límites PHP para estas cargas y Nginx debe conservar `client_max_body_size 60M;`. El directorio de cargas necesita ser escribible por `www-data`.
 
 ## Mercado Pago
 
