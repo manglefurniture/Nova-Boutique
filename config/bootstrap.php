@@ -39,7 +39,9 @@ if (PHP_SAPI !== 'cli' && session_status() !== PHP_SESSION_ACTIVE) {
     session_start();
     header('X-Robots-Tag: noindex, nofollow', true);
     header('X-Content-Type-Options: nosniff');
+    header('X-Frame-Options: SAMEORIGIN');
     header('Referrer-Policy: strict-origin-when-cross-origin');
+    header('Permissions-Policy: camera=(), microphone=(), geolocation=()');
 }
 
 require_once $root . '/src/Database.php';
