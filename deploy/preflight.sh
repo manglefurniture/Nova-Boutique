@@ -23,7 +23,15 @@ mkdir -p "$BACKUP_ROOT"
 
 upload_dir="$APP_ROOT/public/uploads/productos"
 [[ -d "$upload_dir" ]] || { echo "PREFLIGHT_FAILED product upload directory missing: $upload_dir" >&2; exit 1; }
-[[ -w "$upload_dir" ]] || { echo "PREFLIGHT_FAILED product upload directory is not writable" >&2; exit 1; }
+if [[ "$(id -u)" -eq 0 ]]; then
+  command -v runuser >/dev/null 2>&1 || { echo "PREFLIGHT_FAILED missing command: runuser" >&2; exit 1; }
+  runuser -u www-data -- test -w "$upload_dir" || {
+    echo "PREFLIGHT_FAILED product upload directory is not writable by www-data" >&2
+    exit 1
+  }
+else
+  [[ -w "$upload_dir" ]] || { echo "PREFLIGHT_FAILED product upload directory is not writable" >&2; exit 1; }
+fi
 
 php -l "$APP_ROOT/public/index.php" >/dev/null
 php -l "$APP_ROOT/public/health.php" >/dev/null
