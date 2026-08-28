@@ -21,8 +21,18 @@ git rev-parse --is-inside-work-tree >/dev/null
 mkdir -p "$BACKUP_ROOT"
 [[ -w "$BACKUP_ROOT" ]] || { echo "PREFLIGHT_FAILED backup root is not writable" >&2; exit 1; }
 
-upload_dir="$APP_ROOT/public/uploads/productos"
-[[ -d "$upload_dir" ]] || { echo "PREFLIGHT_FAILED product upload directory missing: $upload_dir" >&2; exit 1; }
+upload_dir="$({
+  php -r '
+    $values = parse_ini_file($argv[1], false, INI_SCANNER_RAW);
+    if (!is_array($values)) {
+        fwrite(STDERR, "Could not parse .env\n");
+        exit(2);
+    }
+    $configured = trim((string) ($values["UPLOAD_DIR"] ?? ""));
+    echo $configured !== "" ? $configured : $argv[2];
+  ' "$APP_ROOT/.env" "$APP_ROOT/public/uploads/productos"
+})" || { echo "PREFLIGHT_FAILED could not resolve UPLOAD_DIR" >&2; exit 1; }
+[[ -n "$upload_dir" && -d "$upload_dir" ]] || { echo "PREFLIGHT_FAILED product upload directory missing: $upload_dir" >&2; exit 1; }
 if [[ "$(id -u)" -eq 0 ]]; then
   command -v runuser >/dev/null 2>&1 || { echo "PREFLIGHT_FAILED missing command: runuser" >&2; exit 1; }
   runuser -u www-data -- test -w "$upload_dir" || {
