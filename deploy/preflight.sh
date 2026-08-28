@@ -4,7 +4,7 @@ set -Eeuo pipefail
 : "${APP_ROOT:?APP_ROOT is required}"
 : "${BACKUP_ROOT:?BACKUP_ROOT is required}"
 
-for command in git php curl mariadb mariadb-dump sha256sum; do
+for command in git php curl mariadb mariadb-dump sha256sum tar; do
   command -v "$command" >/dev/null 2>&1 || {
     echo "PREFLIGHT_FAILED missing command: $command" >&2
     exit 1
@@ -20,6 +20,10 @@ git rev-parse --is-inside-work-tree >/dev/null
 
 mkdir -p "$BACKUP_ROOT"
 [[ -w "$BACKUP_ROOT" ]] || { echo "PREFLIGHT_FAILED backup root is not writable" >&2; exit 1; }
+
+upload_dir="$APP_ROOT/public/uploads/productos"
+[[ -d "$upload_dir" ]] || { echo "PREFLIGHT_FAILED product upload directory missing: $upload_dir" >&2; exit 1; }
+[[ -w "$upload_dir" ]] || { echo "PREFLIGHT_FAILED product upload directory is not writable" >&2; exit 1; }
 
 php -l "$APP_ROOT/public/index.php" >/dev/null
 php -l "$APP_ROOT/public/health.php" >/dev/null
