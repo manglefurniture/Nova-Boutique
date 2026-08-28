@@ -24,8 +24,8 @@ $must = [
     'deploy/nginx-nova.conf' => ['client_max_body_size 60M'],
     'deploy/nova-release-reservations.timer' => ['OnUnitActiveSec=1min', 'Persistent=true'],
     'deploy/nova-release-reservations.service' => ['release-expired-reservations.php'],
-    'deploy/backup.sh' => ['BACKUP_OK', 'mariadb-dump', 'uploads.tar.gz'],
-    'deploy/preflight.sh' => ['PREFLIGHT_OK', 'public/uploads/productos', 'runuser -u www-data -- test -w'],
+    'deploy/backup.sh' => ['BACKUP_OK', 'mariadb-dump', 'uploads.tar.gz', 'UPLOAD_DIR', 'parse_ini_file', 'upload-dir.txt'],
+    'deploy/preflight.sh' => ['PREFLIGHT_OK', 'public/uploads/productos', 'runuser -u www-data -- test -w', 'UPLOAD_DIR', 'parse_ini_file'],
     'deploy/health-check.sh' => ['HEALTH_OK'],
     'deploy/rollback.sh' => ['ROLLBACK_CODE_OK'],
 ];
