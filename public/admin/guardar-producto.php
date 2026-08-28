@@ -4,6 +4,7 @@ require_once __DIR__ . '/_bootstrap.php';
 
 $uploadedPaths = [];
 $filesToDeleteAfterCommit = [];
+$galleryLock = null;
 
 try {
     if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
@@ -11,6 +12,7 @@ try {
     }
     Security::verifyCsrf($_POST['csrf'] ?? null);
     $wasUpdate = !empty($_POST['id']);
+    $galleryLock = adminAcquireGalleryLock();
 
     $db->beginTransaction();
     try {
@@ -162,9 +164,13 @@ try {
         throw $e;
     }
 
+    adminReleaseGalleryLock($galleryLock);
+    $galleryLock = null;
     header('Location: /admin/producto.php?id=' . $id);
     exit;
 } catch (Throwable $e) {
+    adminReleaseGalleryLock($galleryLock);
+    $galleryLock = null;
     http_response_code(422);
     adminStart('No se pudo guardar');
     echo '<div class="notice">' . Security::e($e->getMessage()) . '</div><a class="pill" href="/admin/productos.php">Volver</a>';
