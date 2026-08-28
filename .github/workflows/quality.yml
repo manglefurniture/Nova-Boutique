@@ -1,8 +1,10 @@
 name: Quality
+
 on:
   pull_request:
   push:
     branches: [main]
+
 jobs:
   php-quality:
     runs-on: ubuntu-24.04
@@ -28,7 +30,7 @@ jobs:
           sudo apt-get install -y mariadb-client
       - name: PHP syntax
         run: find . -type f -name '*.php' -print0 | xargs -0 -n1 php -l
-      - name: Regressions
+      - name: Static regressions
         run: php tests/regression.php
       - name: Build schema and seed
         env:
@@ -38,3 +40,18 @@ jobs:
           mariadb -h 127.0.0.1 -uroot nova_boutique < database/001_initial.sql
           mariadb -h 127.0.0.1 -uroot nova_boutique < database/002_seed_demo.sql
           mariadb -h 127.0.0.1 -uroot nova_boutique -e "SELECT nombre, precio, stock FROM productos WHERE slug='vestido-aurora'"
+      - name: Schema idempotence
+        env:
+          MYSQL_PWD: root
+        run: |
+          mariadb -h 127.0.0.1 -uroot nova_boutique < database/001_initial.sql
+          mariadb -h 127.0.0.1 -uroot nova_boutique < database/002_seed_demo.sql
+      - name: MariaDB integration
+        env:
+          DB_HOST: 127.0.0.1
+          DB_PORT: 3306
+          DB_DATABASE: nova_boutique
+          DB_USERNAME: root
+          DB_PASSWORD: root
+          PAYMENT_RESERVATION_TTL_MINUTES: 30
+        run: php tests/integration.php
