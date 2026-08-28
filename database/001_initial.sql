@@ -69,7 +69,7 @@ CREATE TABLE IF NOT EXISTS pedidos (
     cliente_telefono VARCHAR(40) NOT NULL,
     cliente_direccion VARCHAR(500) NULL,
     total DECIMAL(10,2) NOT NULL,
-    estado ENUM('pending_payment','paid','cancelled','completed') NOT NULL DEFAULT 'pending_payment',
+    estado ENUM('pending_payment','paid','payment_review','cancelled','completed') NOT NULL DEFAULT 'pending_payment',
     estado_pago VARCHAR(40) NOT NULL DEFAULT 'pending',
     payment_credential_id BIGINT UNSIGNED NULL,
     mp_preference_id VARCHAR(120) NULL,
@@ -80,6 +80,7 @@ CREATE TABLE IF NOT EXISTS pedidos (
     actualizado_en DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     PRIMARY KEY (id),
     UNIQUE KEY uq_pedidos_numero (numero_pedido),
+    UNIQUE KEY uq_pedidos_mp_payment_id (mp_payment_id),
     KEY idx_pedidos_email (cliente_email),
     KEY idx_pedidos_estado (estado, creado_en),
     KEY idx_pedidos_reserva (estado, reserva_liberada, reserva_expira_en),
@@ -106,4 +107,17 @@ CREATE TABLE IF NOT EXISTS pedido_items (
     CONSTRAINT fk_items_producto
       FOREIGN KEY (producto_id) REFERENCES productos(id)
       ON UPDATE RESTRICT ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS audit_events (
+    id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+    actor VARCHAR(190) NOT NULL,
+    action VARCHAR(80) NOT NULL,
+    entity_type VARCHAR(80) NOT NULL,
+    entity_id VARCHAR(120) NULL,
+    details_json LONGTEXT NULL,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (id),
+    KEY idx_audit_entity (entity_type, entity_id),
+    KEY idx_audit_created (created_at)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
