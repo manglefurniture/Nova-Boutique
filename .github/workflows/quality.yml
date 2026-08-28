@@ -50,6 +50,14 @@ jobs:
           mariadb -h 127.0.0.1 -uroot nova_boutique < database/001_initial.sql
           mariadb -h 127.0.0.1 -uroot nova_boutique < database/002_seed_demo.sql
           mariadb -h 127.0.0.1 -uroot nova_boutique < database/003_product_images.sql
+      - name: Product gallery MariaDB integration
+        env:
+          DB_HOST: 127.0.0.1
+          DB_PORT: 3306
+          DB_DATABASE: nova_boutique
+          DB_USERNAME: root
+          DB_PASSWORD: root
+        run: php tests/gallery-integration.php
       - name: MariaDB integration
         env:
           DB_HOST: 127.0.0.1
