@@ -40,15 +40,15 @@ try {
         }
 
         if ($principalId > 0) {
-            usort($imageList, static function (array $a, array $b) use ($principalId): int {
-                if ((int) $a['id'] === $principalId) {
-                    return -1;
+            foreach ($imageList as $index => $image) {
+                if ((int) $image['id'] !== $principalId) {
+                    continue;
                 }
-                if ((int) $b['id'] === $principalId) {
-                    return 1;
-                }
-                return 0;
-            });
+                $principalImage = $image;
+                array_splice($imageList, $index, 1);
+                array_unshift($imageList, $principalImage);
+                break;
+            }
         }
 
         $uploadNames = $_FILES['imagenes']['name'] ?? [];
