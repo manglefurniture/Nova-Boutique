@@ -10,6 +10,7 @@ set -Eeuo pipefail
 
 command -v git >/dev/null 2>&1 || { echo "git is required" >&2; exit 1; }
 command -v mariadb-dump >/dev/null 2>&1 || { echo "mariadb-dump is required" >&2; exit 1; }
+command -v tar >/dev/null 2>&1 || { echo "tar is required" >&2; exit 1; }
 
 stamp="$(date -u +%Y%m%d-%H%M%S)"
 destination="${BACKUP_ROOT%/}/deploy-${stamp}"
@@ -36,7 +37,13 @@ if [[ -f "$APP_ROOT/.env" ]]; then
   chmod 600 "$destination/env.snapshot"
 fi
 
+if [[ -d "$APP_ROOT/public/uploads" ]]; then
+  tar -C "$APP_ROOT/public" -czf "$destination/uploads.tar.gz" uploads
+fi
+
 [[ -s "$destination/database.sql" ]] || { echo "BACKUP_FAILED empty database dump" >&2; exit 1; }
-sha256sum "$destination/commit.txt" "$destination/database.sql" > "$destination/SHA256SUMS"
+checksums=("$destination/commit.txt" "$destination/database.sql")
+[[ -f "$destination/uploads.tar.gz" ]] && checksums+=("$destination/uploads.tar.gz")
+sha256sum "${checksums[@]}" > "$destination/SHA256SUMS"
 printf '%s\n' "$destination"
 echo "BACKUP_OK"
