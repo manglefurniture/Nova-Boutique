@@ -4,7 +4,7 @@ set -Eeuo pipefail
 : "${APP_ROOT:?APP_ROOT is required}"
 : "${BACKUP_ROOT:?BACKUP_ROOT is required}"
 
-for command in git php curl mariadb mariadb-dump sha256sum tar; do
+for command in git php curl mariadb mariadb-dump sha256sum tar flock; do
   command -v "$command" >/dev/null 2>&1 || {
     echo "PREFLIGHT_FAILED missing command: $command" >&2
     exit 1
@@ -17,6 +17,7 @@ git rev-parse --is-inside-work-tree >/dev/null
 [[ -f "$APP_ROOT/.env" ]] || { echo "PREFLIGHT_FAILED .env missing" >&2; exit 1; }
 [[ -f "$APP_ROOT/deploy/backup.sh" ]] || { echo "PREFLIGHT_FAILED backup.sh missing" >&2; exit 1; }
 [[ -f "$APP_ROOT/bin/release-expired-reservations.php" ]] || { echo "PREFLIGHT_FAILED reservation job missing" >&2; exit 1; }
+[[ -r "$APP_ROOT/deploy/gallery.lock" ]] || { echo "PREFLIGHT_FAILED gallery lock missing" >&2; exit 1; }
 
 mkdir -p "$BACKUP_ROOT"
 [[ -w "$BACKUP_ROOT" ]] || { echo "PREFLIGHT_FAILED backup root is not writable" >&2; exit 1; }
@@ -39,8 +40,13 @@ if [[ "$(id -u)" -eq 0 ]]; then
     echo "PREFLIGHT_FAILED product upload directory is not writable by www-data" >&2
     exit 1
   }
+  runuser -u www-data -- test -r "$APP_ROOT/deploy/gallery.lock" || {
+    echo "PREFLIGHT_FAILED gallery lock is not readable by www-data" >&2
+    exit 1
+  }
 else
   [[ -w "$upload_dir" ]] || { echo "PREFLIGHT_FAILED product upload directory is not writable" >&2; exit 1; }
+  [[ -r "$APP_ROOT/deploy/gallery.lock" ]] || { echo "PREFLIGHT_FAILED gallery lock is not readable" >&2; exit 1; }
 fi
 
 php -l "$APP_ROOT/public/index.php" >/dev/null
