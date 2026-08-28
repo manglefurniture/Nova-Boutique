@@ -9,13 +9,22 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
 
 Security::verifyCsrf($_POST['csrf'] ?? null);
 $id = (int) ($_POST['id'] ?? 0);
-ProductRepository::softDelete($db, $id);
-AuditLog::record(
-    $db,
-    (string) ($_SESSION['nova_admin_email'] ?? 'admin'),
-    'product.delete',
-    'product',
-    (string) $id
-);
+$db->beginTransaction();
+try {
+    ProductRepository::softDelete($db, $id);
+    AuditLog::record(
+        $db,
+        (string) ($_SESSION['nova_admin_email'] ?? 'admin'),
+        'product.delete',
+        'product',
+        (string) $id
+    );
+    $db->commit();
+} catch (Throwable $e) {
+    if ($db->inTransaction()) {
+        $db->rollBack();
+    }
+    throw $e;
+}
 header('Location: /admin/productos.php');
 exit;
