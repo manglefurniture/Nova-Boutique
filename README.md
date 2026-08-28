@@ -9,6 +9,7 @@ E-commerce de reventa de ropa desarrollado por Hache Interactive.
 - checkout como invitado, sin cuentas de cliente;
 - panel administrativo para productos, pedidos, inventario, clientes y ventas;
 - alta, edición, activación/desactivación y eliminación lógica de productos;
+- galería de hasta 8 fotos por producto, con carga múltiple desde admin, selección de principal y eliminación;
 - producto muestra incluido;
 - base de Mercado Pago con credenciales versionadas y cifradas siguiendo Hache-Base;
 - reservas de inventario con TTL, liberación programada y conciliación segura de pagos tardíos;
@@ -26,21 +27,35 @@ No se incorporan multisede, múltiples roles, operaciones recurrentes, n8n, corr
 
 ## Requisitos
 
-PHP 8.2+ con `pdo_mysql`, `mbstring`, `openssl`, `curl`; MariaDB 11.x; Nginx apuntando `root` a `public/`.
+PHP 8.2+ con `pdo_mysql`, `mbstring`, `openssl`, `curl` y `fileinfo`; MariaDB 11.x; Nginx apuntando `root` a `public/`.
 
 ## Instalación
 
 1. Copia `.env.example` a `.env`.
-2. Crea la base `nova_boutique` y aplica `database/001_initial.sql` y `database/002_seed_demo.sql`.
+2. Crea la base `nova_boutique` y aplica, en orden, `database/001_initial.sql`, `database/002_seed_demo.sql` y `database/003_product_images.sql`.
 3. Genera el hash del password admin con `php -r "echo password_hash('CAMBIA_ESTA_CLAVE', PASSWORD_DEFAULT), PHP_EOL;"` y colócalo en `ADMIN_PASSWORD_HASH`.
 4. Define una clave maestra estable en `PAYMENT_GATEWAY_CONFIG_KEY` antes de guardar credenciales.
 5. Completa `PRIVACY_CONTROLLER_NAME`, `PRIVACY_ADDRESS` y `PRIVACY_CONTACT_EMAIL` antes de aceptar pedidos reales.
-6. Configura Nginx con `deploy/nginx-nova.conf` como referencia.
-7. Instala el scheduler de reservas descrito abajo.
+6. Prepara el directorio de cargas:
+
+```bash
+install -d -o www-data -g www-data -m 775 /var/www/nova.hacheinteractive.com/app/public/uploads/productos
+```
+
+7. Configura Nginx con `deploy/nginx-nova.conf` como referencia y conserva `client_max_body_size 50M;` también si Certbot modifica el virtual host.
+8. Instala el scheduler de reservas descrito abajo.
 
 ## Producto muestra
 
-La migración `002_seed_demo.sql` crea **Vestido Aurora** a **$699 MXN** con stock inicial de 4 piezas y foto de moda. Desde `/admin/productos.php` se puede cambiar nombre, precio, stock, descripción, foto, estado o eliminarlo.
+La migración `002_seed_demo.sql` crea **Vestido Aurora** a **$699 MXN** con stock inicial de 4 piezas y foto de moda. `003_product_images.sql` conserva esa imagen como la primera foto de su galería. Desde `/admin/productos.php` se puede cambiar nombre, precio, stock, descripción, fotos, estado o eliminarlo.
+
+## Galería de producto
+
+El panel acepta varias fotos en un mismo guardado (`JPG`, `PNG` o `WebP`), hasta 6 por carga, máximo 8 MB por archivo y máximo 8 fotos totales por producto. Las fotos nuevas se almacenan en `public/uploads/productos`, no en GitHub.
+
+La primera imagen por `orden` es la principal y alimenta también `productos.imagen_url` para mantener compatibilidad con tarjetas, carrito y otras vistas. Desde admin se puede elegir otra imagen existente como principal o marcar fotos para eliminar. El storefront muestra la principal y miniaturas para cambiar entre las fotos disponibles.
+
+`public/.user.ini` eleva los límites PHP para estas cargas y Nginx debe conservar `client_max_body_size 50M;`. El directorio de cargas necesita ser escribible por `www-data`.
 
 ## Mercado Pago
 
@@ -76,7 +91,7 @@ bash deploy/preflight.sh
 bash deploy/backup.sh
 ```
 
-El backup registra commit, estado Git, dump MariaDB, snapshot local de `.env` con permisos restrictivos y checksums. `deploy/rollback.sh <commit>` revierte solo código; restaurar base de datos es una decisión separada.
+El backup registra commit, estado Git, dump MariaDB, snapshot local de `.env`, las fotos subidas en `uploads.tar.gz` y checksums. `deploy/rollback.sh <commit>` revierte solo código; restaurar base de datos y archivos subidos es una decisión separada.
 
 Después del deploy:
 
