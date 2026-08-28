@@ -8,20 +8,29 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     try {
         Security::verifyCsrf($_POST['csrf'] ?? null);
         $actor = (string) ($_SESSION['nova_admin_email'] ?? 'admin');
-        PaymentGatewayConfig::save($db, $_POST, $actor);
-        AuditLog::record(
-            $db,
-            $actor,
-            'payment.credentials.rotate',
-            'payment_gateway',
-            'MERCADO_PAGO',
-            [
-                'environment' => strtoupper(trim((string) ($_POST['environment'] ?? 'PRODUCTION'))),
-                'active' => !empty($_POST['active']),
-                'account_id' => trim((string) ($_POST['account_id'] ?? '')),
-                'account_label' => trim((string) ($_POST['account_label'] ?? '')),
-            ]
-        );
+        $db->beginTransaction();
+        try {
+            PaymentGatewayConfig::save($db, $_POST, $actor);
+            AuditLog::record(
+                $db,
+                $actor,
+                'payment.credentials.rotate',
+                'payment_gateway',
+                'MERCADO_PAGO',
+                [
+                    'environment' => strtoupper(trim((string) ($_POST['environment'] ?? 'PRODUCTION'))),
+                    'active' => !empty($_POST['active']),
+                    'account_id' => trim((string) ($_POST['account_id'] ?? '')),
+                    'account_label' => trim((string) ($_POST['account_label'] ?? '')),
+                ]
+            );
+            $db->commit();
+        } catch (Throwable $e) {
+            if ($db->inTransaction()) {
+                $db->rollBack();
+            }
+            throw $e;
+        }
         $message = 'Nueva versión de credenciales guardada.';
     } catch (Throwable $e) {
         $error = $e->getMessage();
