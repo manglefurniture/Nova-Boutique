@@ -4,6 +4,7 @@ declare(strict_types=1);
 require_once dirname(__DIR__) . '/config/bootstrap.php';
 
 $db = Database::connection();
+$_SESSION = [];
 
 function assertTrue(bool $condition, string $message): void
 {
@@ -39,6 +40,22 @@ assertTrue($product !== null && (float) $product['precio'] === 275.0, 'No se edi
 
 ProductRepository::softDelete($db, $productId);
 assertTrue(ProductRepository::findById($db, $productId) === null, 'La eliminación lógica no ocultó el producto.');
+
+// Un producto que se quedó sin stock debe desaparecer del carrito de sesión.
+$zeroSlug = 'sin-stock-ci-' . bin2hex(random_bytes(3));
+$zeroId = ProductRepository::save($db, [
+    'nombre' => 'Sin stock CI',
+    'slug' => $zeroSlug,
+    'precio' => '100.00',
+    'stock' => '0',
+    'imagen_url' => 'https://example.com/zero.jpg',
+    'activo' => '1',
+]);
+Cart::add($zeroId, 1);
+assertTrue(Cart::count() === 1, 'No se preparó el carrito de stock cero.');
+assertTrue(Cart::detailed($db) === [], 'Un producto con stock cero siguió apareciendo en el carrito.');
+assertTrue(Cart::all() === [], 'El producto sin stock no fue retirado de la sesión.');
+ProductRepository::softDelete($db, $zeroId);
 
 // Reserva y liberación de stock usando el producto demo.
 $demo = ProductRepository::findPublicBySlug($db, 'vestido-aurora');
